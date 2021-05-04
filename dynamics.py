@@ -3,7 +3,7 @@ import cvxpy as cp
 from numpy import sin, cos
 
 def rot(theta):
-    return np.array([np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)])
+    return np.array([[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]])
 
 def gamma_t(mu, c, px, py):
     return (mu*c*c - px*py + mu*px*px) / (c*c + py*py - mu*px*py)
@@ -11,7 +11,104 @@ def gamma_t(mu, c, px, py):
 def gamma_b(mu, c, px, py):
     return (-mu*c*c - px*py - mu*px*px) / (c*c + py*py + mu*px*py)
 
-def fi(state, inp, constants, Pi, bi, ci):
+def f_same_side(state, inp, constants, mode):
+    """
+    Mode needs to be a 2-tuple (i, j) specifying mode of each contact.
+    """
+    x, y, theta, py1, py2 = state
+    mu, c, px1, px2 = constants
+
+def A_same_side(state, u, constants, mode):
+    x, y, theta, py1, py2 = state
+    mu, c, px = constants
+
+    A_1 = [A1, A2, A3][mode[0]]([x, y, theta, py1], u[:2], constants)
+    A_2 = [A1, A2, A3][mode[1]]([x, y, theta, py2], u[2:], constants)
+
+    Dg1 = np.zeros((5, 5))
+    Dg1[:4, :4] = A_1
+
+    Dg2 = np.zeros((5, 5))
+    Dg2[:3, :3] = A_2[:3, :3]
+    Dg2[4, :3] = A_2[3, :3]
+    Dg2[:3, 4] = A_2[:3, 3]
+    Dg2[4, 4] = A_2[3, 3]
+
+    return Dg1 + Dg2
+
+def B_same_side(state, u, constants, mode):
+    x, y, theta, py1, py2 = state
+    mu, c, px = constants
+    B_1 = [B1, B2, B3][mode[0]]([x, y, theta, py1], u[:2], constants)
+    B_2 = [B1, B2, B3][mode[1]]([x, y, theta, py2], u[2:], constants)
+
+    g1 = np.zeros((5, 2))
+    g1[:4, :] = B_1
+
+    g2 = np.zeros((5, 2))
+    g2[:3, :] = B_2[:3, :]
+    g2[4, :] = B_2[3, :]
+
+    B = np.zeros((5, 4))
+    B[:, :2] = g1
+    B[:, 2:] = g2
+    return B
+
+def A_opp_side(state, u, constants, mode):
+    x, y, theta, py1, py2 = state
+    mu, c, px = constants
+
+    A_1 = [A1, A2, A3][mode[0]]([x, y, theta, py1], u[:2], constants)
+    A_2 = [A1, A2, A3][mode[1]]([x, y, theta, py2], u[2:], constants)
+
+    Dg1 = np.zeros((5, 5))
+    Dg1[:4, :4] = A_1
+
+    Dg2 = np.zeros((5, 5))
+    Dg2[:3, :3] = A_2[:3, :3]
+    Dg2[4, :3] = A_2[3, :3]
+    Dg2[:3, 4] = A_2[:3, 3]
+    Dg2[4, 4] = A_2[3, 3]
+    Dg2[2:, :2] *= -1
+
+    return Dg1 + Dg2
+
+def B_opp_side(state, u, constants, mode):
+    x, y, theta, py1, py2 = state
+    mu, c, px = constants
+    B_1 = [B1, B2, B3][mode[0]]([x, y, theta, py1], u[:2], constants)
+    B_2 = [B1, B2, B3][mode[1]]([x, y, theta, py2], u[2:], constants)
+
+    g1 = np.zeros((5, 2))
+    g1[:4, :] = B_1
+
+    g2 = np.zeros((5, 2))
+    g2[:3, :] = B_2[:3, :]
+    g2[4, :] = B_2[3, :]
+    g2[:2, :] *= -1
+
+    B = np.zeros((5, 4))
+    B[:, :2] = g1
+    B[:, 2:] = g2
+    return B
+
+# def Ki(state, inp, constants, mode):
+#     x, y, theta, py = state
+#     mu, c, px = constants
+#     C = rot(theta)
+#     Q = (1 / (c*c + px*px + py*py)) * np.array([c*c + px*px, px*py], [px*py, c*c + py*py])
+
+#     if mode == 0:
+#         Pi = np.eye(2)
+#     elif mode == 1:
+#         gt = gamma_t(mu, c, px, py)
+#         Pi = np.array([[1, 0], [gt, 0]])
+#     else:
+#         gb = gamma_b(mu, c, px, py)
+#         Pi = np.array([[1, 0], [gb, 0]])
+#     return C.T @ Q @ Pi
+
+def fi(state, inp, constants, Pi, bi, ci, return_b=False):
     x, y, theta, py = state
     mu, c, px = constants
 
@@ -22,18 +119,20 @@ def fi(state, inp, constants, Pi, bi, ci):
     B[:2, :] = C.T @ Q @ Pi
     B[2,  :] = bi
     B[3,  :] = ci
+    if return_b:
+        return B
     return B @ inp
 
-def f1(state, u, constants):
+def f1(state, u, constants, return_b=False):
     x, y, theta, py = state
     mu, c, px = constants
 
     P1 = np.eye(2)
     b1 = np.array([-py / (c*c + px*px + py*py), px])
     c1 = np.array([0.0, 0.0])
-    return fi(state, u, constants, P1, b1, c1)
+    return fi(state, u, constants, P1, b1, c1, return_b)
 
-def f2(state, u, constants):
+def f2(state, u, constants, return_b=False):
     x, y, theta, py = state
     mu, c, px = constants
 
@@ -42,9 +141,9 @@ def f2(state, u, constants):
     P2 = np.array([[1, 0], [gt, 0]])
     b2 = np.array([(-py + gt*px) / (c*c + px*px + py*py), 0])
     c2 = np.array([-gt, 0])
-    return fi(state, u, constants, P2, b2, c2)
+    return fi(state, u, constants, P2, b2, c2, return_b)
 
-def f3(state, u, constants):
+def f3(state, u, constants, return_b=False):
     x, y, theta, py = state
     mu, c, px = constants
 
@@ -53,7 +152,7 @@ def f3(state, u, constants):
     P3 = np.array([[1, 0], [gb, 0]])
     b3 = np.array([(-py + gb*px) / (c*c + px*px + py*py), 0])
     c3 = np.array([-gb, 0])
-    return fi(state, u, constants, P3, b3, c3)
+    return fi(state, u, constants, P3, b3, c3, return_b)
 
 def A1(state, u, constants):
     x, y, theta, py = state

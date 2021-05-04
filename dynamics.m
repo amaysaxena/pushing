@@ -13,13 +13,13 @@ u = [vn; vt];
 % c = f_max / m_max;
 constants = [mu, c, px];
 
-A1 = ccode(simplify(jacobian(f1(state, u, constants), state)));
-A2 = ccode(simplify(jacobian(f2(state, u, constants), state)));
-A3 = ccode(simplify(jacobian(f3(state, u, constants), state)));
-
-B1 = ccode(simplify(jacobian(f1(state, u, constants), u)));
-B2 = ccode(simplify(jacobian(f2(state, u, constants), u)));
-B3 = ccode(simplify(jacobian(f3(state, u, constants), u)));
+% A1 = ccode(simplify(jacobian(f1(state, u, constants), state)));
+% A2 = ccode(simplify(jacobian(f2(state, u, constants), state)));
+% A3 = ccode(simplify(jacobian(f3(state, u, constants), state)));
+% 
+% B1 = ccode(simplify(jacobian(f1(state, u, constants), u)));
+% B2 = ccode(simplify(jacobian(f2(state, u, constants), u)));
+% B3 = ccode(simplify(jacobian(f3(state, u, constants), u)));
 
 gt = (mu*c*c - px*py + mu*px*px) / (c*c + py*py - mu*px*py);
 gb = (-mu*c*c - px*py - mu*px*px) / (c*c + py*py + mu*px*py);
@@ -75,6 +75,15 @@ function dx = f(state, u, constants, P, b_vec, c_vec)
     Q = (1 / (c*c + px*px + py*py)) * [c*c + px*px, px*py; px*py, c*c + py*py];
 %     disp([C.' * Q * P; b_vec; c_vec])
     dx = [C.' * Q * P; b_vec; c_vec] * u;
+end
+
+function K = K1(state, u, constants)
+    x = state(1); y = state(2); theta = state(3); py = state(4);
+    mu = constants(1); c = constants(2); px = constants(3);
+    C = [cos(theta), sin(theta); -sin(theta), cos(theta)];
+    Q = (1 / (c*c + px*px + py*py)) * [c*c + px*px, px*py; px*py, c*c + py*py];
+    P1 = [1, 0; 0, 1];
+    
 end
 
 
